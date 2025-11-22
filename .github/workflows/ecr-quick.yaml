@@ -1,0 +1,72 @@
+name: Build and Push ECR Image - Quick
+
+on:
+  #push:
+  #  paths:
+  #    #- "API/**"
+  #  branches:
+  #    - main
+  workflow_dispatch: {}
+
+env:
+  OCTOPUS_URL: https://your.octopus.app
+  OCTOPUS_SERVICE_ACCOUNT: service account id
+  OCTOPUS_SPACE: Your space
+  ECR_ROLE_TO_ASSUME: arn:aws:iam::YOUR_ACCOUNT_ID:role/YOUR_ROLE
+  ECR_SESSION_NAME: githubworkflow
+  ECR_REGION: YOUR_AWS_REGION
+  ECR_URL: YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com
+  ECR_REPOSITORY: YOUR_ECR_REPOSITORY
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Set version number
+        id: version-generator
+        run: echo "version=$(date +'%y.%m.%d%H%M%S')-quick" >> $GITHUB_OUTPUT
+
+      - name: Login to Octopus Deploy
+        uses: OctopusDeploy/login@v1
+        with:
+          server: ${{ env.OCTOPUS_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.ECR_ROLE_TO_ASSUME }}
+          role-session-name: ${{ env.ECR_SESSION_NAME }}
+          aws-region: ${{ env.ECR_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - uses: OctopusDeploy/push-build-information-action@v3
+        name: Push build information 🐙
+        with:
+          version: ${{ steps.version-generator.outputs.version }}
+          packages: |
+            ${{ env.ECR_REPOSITORY }}
+
+      - name: Build and push to ECR
+        uses: docker/build-push-action@v4
+        with:
+          context: ./API/
+          file: ./API/Dockerfile
+          push: true
+          platforms: linux/x86_64
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.ECR_URL }}/${{ env.ECR_REPOSITORY }}:${{ steps.version-generator.outputs.version }}
