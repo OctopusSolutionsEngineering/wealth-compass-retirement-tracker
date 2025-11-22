@@ -9,14 +9,15 @@ on:
     workflow_dispatch: {}
 
 env:
-    OCTOPUS_URL: https://your.octopus.app
-    OCTOPUS_SERVICE_ACCOUNT: service account id
-    OCTOPUS_SPACE: Your space
-    PACKAGE_ID: API
-    SBOM_PACKAGE: API.SBOM
+    OCTOPUS_URL: https://wrg.octopus.app
+    OCTOPUS_SERVICE_ACCOUNT: b45a10cc-1380-480d-ab25-28e36d54cd63
+    OCTOPUS_SPACE: New Cascadia Imports
+    DOCKER_HUB_REPOSITORY: octopussolutionsengineering/insurance-wise
+    PACKAGE_ID: RetirementTracker.API
+    SBOM_PACKAGE: RetirementTracker.API.SBOM
     ARTIFACTORY_URL: https://artifactory.octopussamples.com/artifactory
     ARTIFACTORY_REPOSITORY: demo-octopus-app-generic
-    ARTIFACTORY_ORG: app.octopus.your-domain.your-space
+    ARTIFACTORY_ORG: app.octopus.wrg.new-cascadia-imports
 
 jobs:
     configure:
@@ -258,3 +259,21 @@ jobs:
               id: generate-app-attestation
               with:
                   subject-checksums: subject.checksums.txt
+
+    create_and_deploy_release:
+        name: Create and Deploy Octopus Release 🐙
+        needs: [configure, scan, create-gh-release, build, sbom, create_attestations]
+        runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+        steps:
+            - name: Login to Octopus Deploy 🐙
+              uses: OctopusDeploy/login@v1
+              with:
+                  server: ${{ env.OCTOPUS_URL }}
+                  service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT }}
+            - name: Create a release in Octopus Deploy 🐙
+              uses: OctopusDeploy/create-release-action@v3
+              with:
+                project: 'WealthCompass - Retirement Tracker' # Your Octopus Deploy project name
+                package_version: ${{ needs.configure.outputs.version }}
